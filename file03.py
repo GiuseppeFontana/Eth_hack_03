@@ -14,7 +14,7 @@ ip_NS = "10.0.0.1"'''
 
 DNS_SPOOF_IP = "10.0.0.1"
 VULN_DNS_IP = "192.168.56.101"
-VULN_DNS_DPORT = 53
+VULN_DNS_DPORT = 55553
 FAKE_REQUEST = "spoofing.bankofallan.co.uk"
 BAD_DNS_IP = "192.168.56.1"
 
