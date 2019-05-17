@@ -15,9 +15,8 @@ N_TRY = 1
 PACKETS = []
 
 class FirstThread(Thread):
-        def __init__(self, name, job):
+        def __init__(self, job):
                 Thread.__init__(self)
-                self.name = name
                 self.job = job
 
         def run(self):
@@ -66,11 +65,11 @@ def master_job():
         global N_TRY
         global PACKETS
 
-        listener_thread = FirstThread(name="listener", job=1)                                                           # init listener
+        listener_thread = FirstThread(job=1)                                                           # init listener
         listener_thread.start()
 
         while GOAL == 0:
-                sniffer_thread = FirstThread(name="sniffer", job=0)                                                     # init sniffer
+                sniffer_thread = FirstThread(job=0)                                                     # init sniffer
                 sniffer_thread.start()
 
                 time.sleep(1)                                                                                           # waiting for the sniffer
