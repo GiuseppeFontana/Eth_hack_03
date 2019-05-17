@@ -1,7 +1,6 @@
 from scapy.layers.dns import *
 from scapy.all import *
 from threading import Thread
-import time
 
 DNS_SPOOF_IP = "10.0.0.1"
 VULN_DNS_IP = "192.168.56.101"
